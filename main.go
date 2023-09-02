@@ -1,65 +1,79 @@
 package main
 
 import (
+	"embed"
 	"html/template"
 	"net/http"
+	"os"
 	"sync"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+//go:embed index.html templates/*
+var f embed.FS
+
+var m sync.Mutex
+
 type Counter struct {
-	value int
-	mu    sync.Mutex
+	CounterValue int64
 }
 
-func (c *Counter) Increase() {
-	c.mu.Lock()
-	c.value++
-	c.mu.Unlock()
+func (c *Counter) Increment() {
+	m.Lock()
+	defer m.Unlock()
+	c.CounterValue++
 }
 
-func (c *Counter) Decrease() {
-	c.mu.Lock()
-	c.value--
-	c.mu.Unlock()
+func (c *Counter) Decrement() {
+	m.Lock()
+	defer m.Unlock()
+	c.CounterValue--
 }
 
-func (c *Counter) GetValue() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.value
+func (c *Counter) Reset() {
+	m.Lock()
+	defer m.Unlock()
+	c.CounterValue = 0
 }
 
 func main() {
-	counter := &Counter{}
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
-		tmpl, _ := template.ParseFiles("index.html")
-		data := map[string]int{
-			"CounterValue": counter.GetValue(),
-		}
-		tmpl.ExecuteTemplate(w, "index.html", data)
+	counter := Counter{}
+
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+
+	addCounterEndpoint := func(endpoint string, modifyCounter func()) {
+		r.POST(endpoint, func(c *gin.Context) {
+			modifyCounter()
+			c.HTML(http.StatusOK, "templates/counter.tmpl", counter)
+		})
+	}
+
+	r.SetTrustedProxies([]string{})
+
+	ts, err := template.ParseFS(f, "index.html", "templates/counter.tmpl")
+
+	if err != nil {
+		os.Exit(1)
+	}
+
+	r.SetHTMLTemplate(ts)
+
+	// INFO: This is good for quick prototyping, because refreshing the
+	//  browser refreshes the index.html
+	// r.StaticFile("/", "./index.html")
+
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	r.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "index.html", counter)
 	})
-	r.Post("/increase", func(w http.ResponseWriter, _ *http.Request) {
-		tmplStr := "<div id=\"counter\">{{.CounterValue}}</div>"
-		tmpl := template.Must(template.New("counter").Parse(tmplStr))
-		counter.Increase()
-		data := map[string]int{
-			"CounterValue": counter.GetValue(),
-		}
-		tmpl.ExecuteTemplate(w, "counter", data)
-	})
-	r.Post("/decrease", func(w http.ResponseWriter, _ *http.Request) {
-		tmplStr := "<div id=\"counter\">{{.CounterValue}}</div>"
-		tmpl := template.Must(template.New("counter").Parse(tmplStr))
-		counter.Decrease()
-		data := map[string]int{
-			"CounterValue": counter.GetValue(),
-		}
-		tmpl.ExecuteTemplate(w, "counter", data)
-	})
-	http.ListenAndServe("localhost:3000", r)
+
+	addCounterEndpoint("/increment", counter.Increment)
+	addCounterEndpoint("/decrement", counter.Decrement)
+	addCounterEndpoint("/reset", counter.Reset)
+
+	r.Run()
 }

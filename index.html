@@ -13,20 +13,31 @@
   </head>
 
   <body>
-    <div id="counter">{{.CounterValue}}</div>
-    <button
-      hx-target="#counter"
-      hx-post="/decrease"
-      class="bg-blue-700 hover:bg-blue-800 rounded-lg py-2.5 px-4 text-white"
-    >
-      Decrease -
-    </button>
-    <button
-      hx-target="#counter"
-      hx-post="/increase"
-      class="bg-blue-700 hover:bg-blue-800 rounded-lg py-2.5 px-4 text-white"
-    >
-      Increase +
-    </button>
+    <div class="flex justify-center items-center h-screen flex-col">
+      <div id="counter" class="text-red-800 text-5xl">{{ .CounterValue }}</div>
+      <div>
+        <button
+          hx-target="#counter"
+          hx-post="/decrement"
+          class="bg-blue-700 hover:bg-blue-800 rounded-lg py-2.5 px-4 text-white"
+        >
+          -
+        </button>
+        <button
+          hx-target="#counter"
+          hx-post="/reset"
+          class="bg-blue-700 hover:bg-blue-800 rounded-lg py-2.5 px-4 text-white"
+        >
+          0
+        </button>
+        <button
+          hx-target="#counter"
+          hx-post="/increment"
+          class="bg-blue-700 hover:bg-blue-800 rounded-lg py-2.5 px-4 text-white"
+        >
+          +
+        </button>
+      </div>
+    </div>
   </body>
 </html>
